@@ -4,8 +4,7 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
-#https://dev.mysql.com/downloads/mysql/5.7.html
-#https://dev.mysql.com/downloads/file/?id=489855
+# https://downloads.mysql.com/archives/community/
 
 curPath=`pwd`
 rootPath=$(dirname "$curPath")
@@ -14,101 +13,134 @@ serverPath=$(dirname "$rootPath")
 sysName=`uname`
 
 
-install_tmp=${rootPath}/tmp/mw_install.pl
-mysqlDir=${serverPath}/source/mysql
+myDir=${serverPath}/source/mysql-yum
 
+ARCH=`uname -m`
+ARCH_NAME=''
+case $(uname -m) in
+    i386)   ARCH_NAME="386" ;;
+    i686)   ARCH_NAME="386" ;;
+    x86_64) ARCH_NAME="amd64" ;;
+    arm)    ARCH_NAME="arm64" ;;
+esac
 
-_os=`uname`
-if [ ${_os} == "Darwin" ]; then
-    OSNAME='macos'
-elif grep -Eqi "CentOS" /etc/issue || grep -Eq "CentOS" /etc/*-release; then
-    OSNAME='centos'
-elif grep -Eqi "Rocky" /etc/issue || grep -Eq "Rocky" /etc/*-release; then
-    OSNAME='rocky'
-elif grep -Eqi "Red Hat Enterprise Linux Server" /etc/issue || grep -Eq "Red Hat Enterprise Linux Server" /etc/*-release; then
-    OSNAME='rhel'
-elif grep -Eqi "Aliyun" /etc/issue || grep -Eq "Aliyun" /etc/*-release; then
-    OSNAME='aliyun'
-elif grep -Eqi "Fedora" /etc/issue || grep -Eq "Fedora" /etc/*-release; then
-    OSNAME='fedora'
-elif grep -Eqi "Amazon Linux AMI" /etc/issue || grep -Eq "Amazon Linux AMI" /etc/*-release; then
-    OSNAME='amazon'
-elif grep -Eqi "Debian" /etc/issue || grep -Eq "Debian" /etc/*-release; then
-    OSNAME='debian'
-elif grep -Eqi "Ubuntu" /etc/issue || grep -Eq "Ubuntu" /etc/*-release; then
-    OSNAME='ubuntu'
-elif grep -Eqi "Raspbian" /etc/issue || grep -Eq "Raspbian" /etc/*-release; then
-    OSNAME='raspbian'
-elif grep -Eqi "Deepin" /etc/issue || grep -Eq "Deepin" /etc/*-release; then
-    OSNAME='deepin'
-else
-    OSNAME='unknow'
+bash ${rootPath}/scripts/getos.sh
+OSNAME=`cat ${rootPath}/data/osname.pl`
+VERSION_ID=`cat /etc/*-release | grep VERSION_ID | awk -F = '{print $2}' | awk -F "\"" '{print $2}'`
+echo "VERSION_ID:${VERSION_ID}"
+
+if [ "$OSNAME" == "centos" ] && [ "$VERSION_ID" -gt "7" ]; then
+	VERSION_ID=7
 fi
 
-VERSION_ID=`cat /etc/*-release | grep VERSION_ID | awk -F = '{print $2}' | awk -F "\"" '{print $2}'`
+OS_SIGN=1.el9
+if [ "$OSNAME" == "centos" ];then
+	OS_SIGN=1.el${VERSION_ID}
+elif [ "$OSNAME" == "fedora" ]; then
+	OS_SIGN=10.fc${VERSION_ID}
+elif [ "$OSNAME" == "opensuse" ]; then
+	OS_SIGN=1.sl${VERSION_ID:0:2}
+fi
 
-
+MYSQL_VER=5.7.44
+SUFFIX_NAME=${MYSQL_VER}-${OS_SIGN}.${ARCH}
 
 YUM_INSTALL()
 {
-#######
-#http://repo.mysql.com/
 
-if [ "${OSNAME}" == "centos" ] && [ "${VERSION_ID}" -le "7" ]  ;then
-	wget -O /tmp/mysql57-community-release-el${VERSION_ID}.rpm http://repo.mysql.com/mysql57-community-release-el${VERSION_ID}.rpm
-	rpm -ivh /tmp/mysql57-community-release-el${VERSION_ID}.rpm
-	yum -y install mysql-server
-	rm -rf  /tmp/mysql57-community-release-el${VERSION_ID}.rpm
-fi
+mkdir -p /var/run/mysqld
+chown mysql -R /var/run/mysqld
+
+#######
+mkdir -p $myDir
+
+wget --no-check-certificate -O $myDir/mysql-${SUFFIX_NAME}.rpm-bundle.tar https://cdn.mysql.com/archives/mysql-5.7/mysql-${SUFFIX_NAME}.rpm-bundle.tar
+cd ${myDir} && tar vxf mysql-${SUFFIX_NAME}.rpm-bundle.tar
+
+mkdir -p ${serverPath}/mysql-yum/bin && cd ${serverPath}/mysql-yum/bin
+
+rpm2cpio ${myDir}/mysql-community-client-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-common-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-devel-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-embedded-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-embedded-compat-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-embedded-devel-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-libs-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-libs-compat-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-server-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-test-${SUFFIX_NAME}.rpm | cpio -div
+
+#######
+}
+
+ZYPPER_INSTALL()
+{
+zypper install -y libstdc++6
+
+mkdir -p /var/run/mysqld
+chown mysql -R /var/run/mysqld
+#######
+mkdir -p $myDir
+
+wget --no-check-certificate -O $myDir/mysql-${SUFFIX_NAME}.rpm-bundle.tar https://cdn.mysql.com/archives/mysql-5.7/mysql-${SUFFIX_NAME}.rpm-bundle.tar
+echo "wget --no-check-certificate -O $myDir/mysql-${SUFFIX_NAME}.rpm-bundle.tar https://cdn.mysql.com/archives/mysql-5.7/mysql-${SUFFIX_NAME}.rpm-bundle.tar"
+
+cd ${myDir} && tar vxf mysql-${SUFFIX_NAME}.rpm-bundle.tar
+
+mkdir -p ${serverPath}/mysql-yum/bin && cd ${serverPath}/mysql-yum/bin
+
+rpm2cpio ${myDir}/mysql-community-client-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-client-${SUFFIX_NAME}.x86_64.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-common-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-debuginfo-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-devel-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-embedded-compat-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-icu-data-files-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-libs-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-libs-compat-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-server-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-server-debug-${SUFFIX_NAME}.rpm | cpio -div
+rpm2cpio ${myDir}/mysql-community-test-${SUFFIX_NAME}.rpm | cpio -div
+
 #######
 }
 
 YUM_UNINSTALL()
 {
 ### YUM卸载 START ########
-yum  remove -y mysql-server
+# yum -y remove mysql-server
+rm -rf ${myDir}
 ### YUM卸载 END   ########
 }
-
 
 
 Install_mysql()
 {
 
-	echo '正在安装脚本文件...' > $install_tmp
+	echo '正在安装脚本文件...'
 
-	if id mysql &> /dev/null ;then 
-	    echo "mysql UID is `id -u mysql`"
-	    echo "mysql Shell is `grep "^mysql:" /etc/passwd |cut -d':' -f7 `"
-	else
-	    groupadd mysql
-		useradd -g mysql mysql
-	fi
+	mkdir -p $serverPath/mysql-yum
 
 	isYum=`which yum`
 	if [ "$isYum" != "" ];then
 		YUM_INSTALL
 	fi
 
-	if [ "$?" == "0" ];then
-		mkdir -p $serverPath/mysql-yum
-		echo '5.7' > $serverPath/mysql-yum/version.pl
-		echo '安装完成' > $install_tmp
-	else
-		echo "暂时不支持该系统" > $install_tmp
+	isZypper=`which zypper`
+	if [ "$isZypper" != "" ];then
+		ZYPPER_INSTALL
 	fi
+	
+	rm -rf $myDir
+	echo '5.7' > $serverPath/mysql-yum/version.pl
+	echo '安装完成'
 }
 
 Uninstall_mysql()
 {
-	isYum=`which yum`
-	if [ "$isYum" != "" ];then
-		YUM_UNINSTALL
-	fi
-
-
+	YUM_UNINSTALL
 	rm -rf $serverPath/mysql-yum
-	echo '卸载完成' > $install_tmp
+	echo '卸载完成'
 }
 
 action=$1
